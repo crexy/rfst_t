@@ -3,7 +3,7 @@ from gridworld_env import Env
 from collections import defaultdict
 
 
-class Sarsa:
+class Q_Learning:
     def __init__(self):
         self.qvalue_table = defaultdict(lambda : [0.0]*Env.ACTION_SIZE)
         self.env = Env()
@@ -31,10 +31,10 @@ class Sarsa:
         action_idx = np.random.choice(max_actions)
         return possible_actions[action_idx]
 
-    def learn(self, s0, a0, r1, s1, a1):
+    def learn(self, s0, a0, r1, s1):
         s0qval = self.qvalue_table[tuple(s0)][a0]
-        s1qval = self.qvalue_table[tuple(s1)][a1]
-        next_s0value = s0qval + self.learning_rate*(r1+self.discount_factor*s1qval - s0qval)
+        max_s1qval = max(self.qvalue_table[tuple(s1)]) # 최적 방정식 사용
+        next_s0value = s0qval + self.learning_rate*(r1+self.discount_factor*max_s1qval - s0qval)
         self.qvalue_table[tuple(s0)][a0] = next_s0value
 
     # 저장된 q값 중 최대 값에 해당하는 방향의 스테이지에 +1을 해줘 q 값을 통한 이동 경로를 보여줌
@@ -73,7 +73,7 @@ class Sarsa:
             while True:
                 reward, next_state, done = self.env.move(action)
                 next_action = self.get_action(next_state)
-                self.learn(state, action, reward, next_state, next_action)
+                self.learn(state, action, reward, next_state)
                 state = next_state
                 action = next_action
                 move_cnt += 1
@@ -86,5 +86,5 @@ class Sarsa:
                     break
 
 if __name__ == "__main__":
-    sarsa = Sarsa()
-    sarsa.run()
+    qlearning = Q_Learning()
+    qlearning.run()

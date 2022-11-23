@@ -1,12 +1,12 @@
 import pyupbit
 
-def save_ohlcv():
-    df = pyupbit.get_ohlcv("KRW-BTC", count=600)
+def save_ohlcv(data_cnt):
+    df = pyupbit.get_ohlcv("KRW-BTC", count=data_cnt)
     df.to_csv("./data/KRW_BTC.csv", sep=",")
+    return df
 
 def preprocessing_ohlcv():
-    df = pyupbit.get_ohlcv("KRW-BTC", count=1000)
-
+    df = save_ohlcv(1000)
     '''    
     ohlcv 데이터는 비율 데이터로 변환하여 사용
     open_ratio      = 오늘 시가 / 어제 시가
@@ -34,6 +34,7 @@ def preprocessing_ohlcv():
     df["ma_30_7_ratio"] = df.ma_30 / df.ma_7
     df["ma_30_15_ratio"] = df.ma_30 / df.ma_15
 
+    # 데이터 범위를 -1 ~ 1로 조정
     df["open_ratio"] -= 1
     df["high_open_ratio"] -= 1
     df["low_open_ratio"] -= 1
@@ -44,7 +45,7 @@ def preprocessing_ohlcv():
     df["ma_30_15_ratio"] -= 1
 
     df = df.dropna(axis=0) # 결측치 행 제거
-    df = df.drop(['open', 'high', 'low', 'close', 'volume', 'value', 'ma_7', 'ma_15', 'ma_30'], axis=1)
+    df = df.drop(['open', 'high', 'low', 'volume', 'value', 'ma_7', 'ma_15', 'ma_30'], axis=1)
 
     df.to_csv("./data/KRW_BTC_traing.csv", sep=",")
 

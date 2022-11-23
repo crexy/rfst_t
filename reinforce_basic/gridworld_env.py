@@ -41,16 +41,19 @@ class Env:
             next_state += 1
         return next_state
 
-    def get_possible_actions(self):
+    def get_possible_actions(self, state = np.array([])):
+        if len(state) == 0:
+            state = self.get_player_state()
         possible_actions = []
-        if self.player_state[0] > 0:
-            possible_actions.append(self.UP)
-        if self.player_state[0] < self.HEIGHT-1:
-            possible_actions.append(self.DOWN)
-        if self.player_state[1] > 0:
+        if state[1] > 0:
             possible_actions.append(self.LEFT)
-        if self.player_state[1] < self.WIDTH-1:
+        if state[1] < self.WIDTH-1:
             possible_actions.append(self.RIGHT)
+        if state[0] > 0:
+            possible_actions.append(self.UP)
+        if state[0] < self.HEIGHT-1:
+            possible_actions.append(self.DOWN)
+
         return possible_actions
 
     def move(self, action):
