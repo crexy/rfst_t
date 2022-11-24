@@ -7,9 +7,9 @@ class Trading_Env:
     SELL: Final = 1
     HOLD: Final = 2
     ACTION_SIZE: Final = 3
+    trading_fee:Final = 0.0005 # 거래 수수료
 
     def __init__(self, ohlcvfile_path, nninputfile_path, balance=1000000):
-
         '''
         상태 데이터 정의
          - 트레이딩 기본자료 (KRW_BTC_traing.csv) 데이터
@@ -29,6 +29,8 @@ class Trading_Env:
         self.avg_price = 0
         # 현재 데이터 인덱스
         self.cur_data_idx = 0
+        # 거래 기록
+        self.trading_record = [] # 날짜, 데이터 인덱스, 행동, 매도/매수 물량, 코인가격, 거래수수료
 
     def get_state(self, action):
 
@@ -38,11 +40,25 @@ class Trading_Env:
             pass
         elif action == self.SELL:
             pass
-        else:
+        else: # HOLD
             pass
 
+    def trading(self, action, confidence): # confidence: 행동에 대한 확신 값
 
-    def trading(self, action):
+        sr_ohlcv = self.df_ohlcv.iloc[self.cur_data_idx]
+        price = sr_ohlcv.close
+        volume = 0
+
+        if action == self.BUY:
+            maxVolume = self.balance / (price*(1+self.trading_fee)) # 거래 수수료 계산
+            buyVolume = maxVolume * confidence
+
+            self.coin_quantity += buyVolume
+
+        elif action == self.SELL:
+            pass
+        else: # HOLD
+            pass
+
         pass
-
 
