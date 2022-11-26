@@ -6,7 +6,7 @@ def save_ohlcv(data_cnt):
     return df
 
 def preprocessing_ohlcv():
-    df = save_ohlcv(1000)
+    df = save_ohlcv(365)
     '''    
     ohlcv 데이터는 비율 데이터로 변환하여 사용
     open_ratio      = 오늘 시가 / 어제 시가
@@ -45,9 +45,12 @@ def preprocessing_ohlcv():
     df["ma_30_15_ratio"] -= 1
 
     df = df.dropna(axis=0) # 결측치 행 제거
-    df = df.drop(['open', 'high', 'low', 'volume', 'value', 'ma_7', 'ma_15', 'ma_30'], axis=1)
 
-    df.to_csv("./data/KRW_BTC_traing.csv", sep=",")
+    df_nnInput = df.drop(['open', 'high', 'low', 'close', 'volume', 'value', 'ma_7', 'ma_15', 'ma_30'], axis=1)
+    df_ohlcv = df[['open', 'high', 'low', 'close', 'volume']]
+
+    df_nnInput.to_csv("./data/KRW_BTC_traing.csv", sep=",")
+    df_ohlcv.to_csv("./data/KRW_BTC.csv", sep=",")
 
 
 if __name__ == "__main__":
