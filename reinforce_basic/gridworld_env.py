@@ -29,8 +29,11 @@ class Env:
     def get_reward(self, state):
         return self.reward_table[tuple(state)]
 
-    def get_state(self, action):
-        next_state = self.player_state
+    def get_state(self, action, state = np.array([])):
+        if len(state) == 0:
+            state = self.get_player_state()
+        else:
+            next_state = state
         if action == self.UP and next_state[0] > 0:
             next_state[0] -= 1
         if action == self.DOWN and next_state[0] < self.HEIGHT-1:
