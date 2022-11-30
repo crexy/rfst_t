@@ -40,6 +40,6 @@ class Trading_Env:
 if __name__ == "__main__":
     a = 0
 
-    env = Trading_Env(ohlcvfile_path="./data/KRW_BTC.csv", nninputfile_path="./data/KRW_BTC_traing.csv")
+    env = Trading_Env(ohlcvfile_path="../data/KRW_BTC.csv", nninputfile_path="../data/KRW_BTC_traing.csv")
     state = env.get_price()
     print(state)

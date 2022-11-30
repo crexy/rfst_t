@@ -22,31 +22,39 @@ def preprocessing_ohlcv():
     ma_30_15_ratio  = 30 이평 / 15 이평    
     '''
 
-    df["open_ratio"] = df.open / df.open.shift(1)
-    df["high_open_ratio"] = df.high / df.open
-    df["low_open_ratio"] = df.low / df.open
-    df["close_open_ratio"] = df.close / df.open
-    df["volume_ratio"] = df.volume / df.volume.shift(1)
+    df["open_r"] = df.open / df.open.shift(1)
+    df["high_r"] = df.high / df.high.shift(1)
+    df["low_r"] = df.low / df.low.shift(1)
+    df["close_r"] = df.close / df.close.shift(1)
+    df["volume_r"] = df.volume / df.volume.shift(1)
     df["ma_7"] = df.close.rolling(window=7).mean()
     df["ma_15"] = df.close.rolling(window=15).mean()
     df["ma_30"] = df.close.rolling(window=30).mean()
-    df["ma_15_7_ratio"] = df.ma_15 / df.ma_7
-    df["ma_30_7_ratio"] = df.ma_30 / df.ma_7
-    df["ma_30_15_ratio"] = df.ma_30 / df.ma_15
+
+    df["ma_7_r"] = df.ma_7 / df.close
+    df["ma_15_r"] = df.ma_15 / df.close
+    df["ma_30_r"] = df.ma_30 / df.close
 
     # 데이터 범위를 -1 ~ 1로 조정
-    df["open_ratio"] -= 1
-    df["high_open_ratio"] -= 1
-    df["low_open_ratio"] -= 1
-    df["close_open_ratio"] -= 1
-    df["volume_ratio"] -= 1
-    df["ma_15_7_ratio"] -= 1
-    df["ma_30_7_ratio"] -= 1
-    df["ma_30_15_ratio"] -= 1
+    # df["open_r"] *= 10
+    # df["high_r"] *= 10
+    # df["low_r"] *= 10
+    # df["close_r"] *= 10
+    # df["volume_r"] *= 10
+    # df["ma_7_r"] *= 10
+    # df["ma_15_r"] *= 10
+    # df["ma_30_r"] *= 10
+
 
     df = df.dropna(axis=0) # 결측치 행 제거
 
+
+
+    #df_nnInput = df.drop(['value'], axis=1)
     df_nnInput = df.drop(['open', 'high', 'low', 'close', 'volume', 'value', 'ma_7', 'ma_15', 'ma_30'], axis=1)
+
+    #df_nnInput = (df_nnInput - df_nnInput.mean()) / df_nnInput.std()
+
     df_ohlcv = df[['open', 'high', 'low', 'close', 'volume']]
 
     df_nnInput.to_csv("./data/KRW_BTC_traing.csv", sep=",")

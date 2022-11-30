@@ -12,7 +12,10 @@ import torch.optim as optim
 
 import numpy as np
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+import matplotlib.pyplot as plt
+
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = "cpu"
 
 #날짜, 데이터 인덱스, 행동, 매도/매수 물량, 코인가격, 거래수수료
 
@@ -27,7 +30,9 @@ class Agent_log:
     action: int = -1
     trading_volume: float = 0.
     price: int = 0
+    trading_price: float=0.
     trading_fee: float = 0.
+
 
 
 class DNN_Sarsa(nn.Module):
@@ -35,18 +40,24 @@ class DNN_Sarsa(nn.Module):
         super(DNN_Sarsa, self).__init__()
 
         self.fc1 = nn.Linear(state_size, 50)
-        self.fc2 = nn.Linear(50, 100)
-        self.fc3 = nn.Linear(100, 50)
+        self.fc2 = nn.Linear(50, 50)
         self.out = nn.Linear(50, action_size)
-        self.dropout = nn.Dropout(0.5)
+        #self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
+
+        # x = F.relu(self.fc1(x))
+        # x = F.relu(self.fc2(x))
+        # x = self.dropout(x)
+        # out = F.relu(self.out(x))
+
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.dropout(x)
-        x = F.relu(self.fc3(x))
-        x = F.relu(self.out(x))
-        out = F.softmax(x, dim=1)
+        #x = self.dropout(x)
+        #x = F.relu(self.fc3(x))
+        out = self.out(x)
+        #out = F.softmax(x, dim=1)
+
         return out
 
 
@@ -68,7 +79,7 @@ class Trading_Agent:
 
     def __init__(self,balance=1000000):
         # 거래 환경 객체
-        self.env = Trading_Env("./data/KRW_BTC.csv", "./data/KRW_BTC_traing.csv")
+        self.env = Trading_Env("../data/KRW_BTC.csv", "../data/KRW_BTC_traing.csv")
         # 잔액
         self.init_balance = balance
         self.balance = balance
@@ -87,7 +98,7 @@ class Trading_Agent:
         self.criterion = nn.MSELoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
-        self.epoch_cnt = 50
+        self.epoch_cnt = 300
         self.discount_factor = 0.9
         self.epsilon = 0.5
         self.epsilon_decay = 0.95
@@ -107,7 +118,8 @@ class Trading_Agent:
                        trdVolume, price):
         rec = Agent_log(date=date, balance=balance, coin_quantity=coin_quantity,
                         avg_price=avg_price, profitloss=profitloss, portfolio_val=portfolio_val, action=action,
-                        trading_volume=trdVolume, price=price, trading_fee=trdVolume*(self.trading_fee)*price)
+                        trading_volume=trdVolume, price=price, trading_price=trdVolume*(self.trading_fee+1)*price,
+                        trading_fee=trdVolume*(self.trading_fee)*price)
         self.agent_log_add(rec)
 
     def reset(self, balance=1000000):
@@ -193,22 +205,38 @@ class Trading_Agent:
         state = torch.Tensor(state).unsqueeze(0).to(device)
         next_state = torch.Tensor(next_state).unsqueeze(0).to(device)
 
-        predict = self.model(state)[0][action]
-        target = reward + self.discount_factor * torch.max(self.model(next_state))
+        predict = self.model(state)[0]
+        predict_val = predict[action]
+        next_q = self.model(next_state)
+        next_q_val = torch.max(next_q)
+        target = reward + self.discount_factor * next_q_val
 
-        loss = self.criterion(target, predict)
+        # print("predict")
+        # print(predict)
+        # print("next_q")
+        # print(next_q)
+
+        #loss = self.criterion(target, predict)
+        loss = torch.mean(torch.square(target - predict_val))
         loss.backward()
         self.optimizer.step()
 
 
+    def softmax(self, x):
+        max = np.max(x)
+        x = x-max
+        sum = np.sum(np.exp(x))
+        y = np.exp(x)/sum
+        return y
 
     def get_action(self, state):
         if np.random.rand() < self.epsilon:
             confidence = np.min([np.random.rand(), 0.5]) # 탐험의 경우 확신도는 0.5 이하의 램덤수
             return np.random.choice(self.ACTION_SIZE), confidence # or return np.random.randrange(self.ACTION_SIZE)
         state = torch.Tensor(state).unsqueeze(0).to(device)
-        q_values = self.model(state)
-        return torch.argmax(q_values).item(), torch.max(q_values).item()
+        q_values = self.model(state)[0].detach().numpy()
+        confidence = self.softmax(q_values)
+        return np.argmax(q_values), max(confidence)
 
     def get_state(self):
         state =self.env.get_state()
@@ -216,12 +244,15 @@ class Trading_Agent:
         return state
 
     def run(self, training=True):
+        list_profitloss = []
         max_portfolio_val = 0
         for ep in range(self.epoch_cnt):
             print(f"\n================= Epoch: {ep+1} =================")
             self.reset()
             state = self.get_state()
             action, confidence = self.get_action(state)
+
+
 
             for idx in range(self.env.get_data_size()-1):
 
@@ -237,17 +268,21 @@ class Trading_Agent:
                 action = next_action
 
             print(f"포트폴리오 가치: {self.portfolio_val:.0f}")
+            list_profitloss.append(self.profitloss)
 
             if self.portfolio_val > max_portfolio_val:
                 self.save_record_to_csv()
-                torch.save(self.model.state_dict(), f"./model/deep_sarsa.pth")
+                torch.save(self.model.state_dict(), f"../model/deep_sarsa.pth")
                 print(f"모델 저장!")
                 max_portfolio_val = self.portfolio_val
+
+        plt.plot(list_profitloss)
+        plt.show()
 
 
     def save_record_to_csv(self):
         df = pd.DataFrame(self.list_agent_log)
-        df.to_csv(f"./log/deep_sarsa.csv")
+        df.to_csv(f"../log/deep_sarsa.csv")
 
 if __name__ == "__main__":
     # x = torch.FloatTensor(range(15))  # 입력 값

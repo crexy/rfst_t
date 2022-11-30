@@ -114,7 +114,7 @@ class policy_iteration:
 
         self.value_table = next_value_table
 
-    def policy_improment(self):
+    def policy_improvement(self):
         next_policy_table = np.zeros_like(self.policy_table)
         for row in range(Env.HEIGHT):
             for col in range(Env.WIDTH):
@@ -155,7 +155,7 @@ class policy_iteration:
         loop_max = 100
         for loop_idx in range(loop_max):
             self.policy_evaluation()
-            self.policy_improment()
+            self.policy_improvement()
             #action_table = np.argmax(self.policy_table, axis=2)
             print(f"Loop: {loop_idx + 1}")
             #print(action_table)
