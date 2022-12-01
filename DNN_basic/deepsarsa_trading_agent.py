@@ -40,8 +40,9 @@ class DNN_Sarsa(nn.Module):
         super(DNN_Sarsa, self).__init__()
 
         self.fc1 = nn.Linear(state_size, 50)
-        self.fc2 = nn.Linear(50, 50)
-        self.out = nn.Linear(50, action_size)
+        self.fc2 = nn.Linear(50, 100)
+        #self.fc3 = nn.Linear(50, 50)
+        self.out = nn.Linear(100, action_size)
         #self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
@@ -53,6 +54,7 @@ class DNN_Sarsa(nn.Module):
 
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
+        #x = F.relu(self.fc3(x))
         #x = self.dropout(x)
         #x = F.relu(self.fc3(x))
         out = self.out(x)
@@ -67,7 +69,8 @@ class Trading_Agent:
     HOLD: Final = 2
     ACTION_SIZE: Final = 3
     trading_fee:Final = 0.0005 # 거래 수수료
-    STATE_SIZE = 10
+    STATE_SIZE = 11
+    EPOCH_CNT = 300
 
     '''
     상태 데이터 정의
@@ -98,7 +101,6 @@ class Trading_Agent:
         self.criterion = nn.MSELoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
-        self.epoch_cnt = 300
         self.discount_factor = 0.9
         self.epsilon = 0.5
         self.epsilon_decay = 0.95
@@ -198,7 +200,7 @@ class Trading_Agent:
 
         return reward, self.get_state()
 
-    def learn(self, state, action, reward, next_state):
+    def learn(self, state, action, reward, next_state, done):
 
         self.model.train()
         self.optimizer.zero_grad()
@@ -209,7 +211,7 @@ class Trading_Agent:
         predict_val = predict[action]
         next_q = self.model(next_state)
         next_q_val = torch.max(next_q)
-        target = reward + self.discount_factor * next_q_val
+        target = reward + self.discount_factor * next_q_val *(1-done)
 
         # print("predict")
         # print(predict)
@@ -240,19 +242,25 @@ class Trading_Agent:
 
     def get_state(self):
         state =self.env.get_state()
-        state.extend([self.hold_ratio, self.profitloss])
+        state.extend([self.hold_ratio, self.balance/self.init_balance, self.profitloss])
         return state
 
     def run(self, training=True):
         list_profitloss = []
         max_portfolio_val = 0
-        for ep in range(self.epoch_cnt):
+
+        plus_reward_goal = 0.889 # 최적의 goal 값은 0.889
+        plus_reward_multi = 1.0
+        max_plus_reward_goal = 1.1
+
+        for ep in range(self.EPOCH_CNT):
             print(f"\n================= Epoch: {ep+1} =================")
             self.reset()
             state = self.get_state()
             action, confidence = self.get_action(state)
 
-
+            done = False
+            plus_reward_sum = 0.
 
             for idx in range(self.env.get_data_size()-1):
 
@@ -262,13 +270,32 @@ class Trading_Agent:
                 reward, next_state = self.trading(action, confidence)
                 next_action, confidence = self.get_action(next_state)
 
-                self.learn(state, action, reward, next_state)
+                if reward > 0:
+                    plus_reward_sum += reward
+                    reward = 0
+
+                #plus_reward_sum += reward
+
+                if plus_reward_sum > plus_reward_goal:
+                    #done= True
+                    reward = 1
+                    print("보상 획득")
+                    plus_reward_sum = 0
+                    if plus_reward_goal < max_plus_reward_goal:
+                        plus_reward_goal *= plus_reward_multi
+
+
+                self.learn(state, action, reward, next_state, done)
+
+                if done:
+                    break
 
                 state = next_state
                 action = next_action
 
-            print(f"포트폴리오 가치: {self.portfolio_val:.0f}")
+            print(f"{self.env.get_date()}) 포트폴리오 가치: {self.portfolio_val:.0f}")
             list_profitloss.append(self.profitloss)
+            print(f"보상 목표: {plus_reward_goal:.3f}, 힉득 보상: {plus_reward_sum:.3f}")
 
             if self.portfolio_val > max_portfolio_val:
                 self.save_record_to_csv()
