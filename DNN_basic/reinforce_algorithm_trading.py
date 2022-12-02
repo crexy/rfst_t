@@ -210,10 +210,10 @@ class Trading_Agent:
         state = torch.Tensor(list_state).unsqueeze(0).to(device)
 
         policies = self.model(state)[0]
-        one_hot_action = F.one_hot(list_action)
+        one_hot_action = F.one_hot(torch.tensor(list_action))
 
         action_prob = torch.sum(policies*one_hot_action, dim=1)
-        cross_entropy_loss = -torch.sum(torch.log(action_prob+1e-5)*discounted_rewards)
+        cross_entropy_loss = -torch.sum(torch.log(action_prob+1e-5)*torch.tensor(discounted_rewards))
 
         cross_entropy_loss.backward()
 
