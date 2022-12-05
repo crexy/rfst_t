@@ -1,12 +1,12 @@
 import pyupbit
 
 def save_ohlcv(data_cnt):
-    df = pyupbit.get_ohlcv("KRW-BTC", count=data_cnt)
+    df = pyupbit.get_ohlcv("KRW-BTC", interval='minute5', count=data_cnt)
     df.to_csv("./data/KRW_BTC.csv", sep=",")
     return df
 
 def preprocessing_ohlcv():
-    df = save_ohlcv(365)
+    df = save_ohlcv(3000)
     '''    
     ohlcv 데이터는 비율 데이터로 변환하여 사용
     open_ratio      = 오늘 시가 / 어제 시가
