@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 
 import pandas as pd
@@ -16,7 +17,11 @@ import matplotlib.pyplot as plt
 
 from collections import deque
 
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+import random
+
+import os.path
+
+#device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = "cpu"
 
 #날짜, 데이터 인덱스, 행동, 매도/매수 물량, 코인가격, 거래수수료
@@ -53,7 +58,7 @@ class SimpleDNN(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        out = self.out(x)
+        out = F.softmax(self.out(x), dim=1)
         return out
 
 
@@ -64,8 +69,9 @@ class Trading_Agent:
     ACTION_SIZE: Final = 3
     trading_fee:Final = 0.0005 # 거래 수수료
     STATE_SIZE = 11
-    EPOCH_CNT = 300
-    BATCH_SIZE = 64
+    EPOCH_CNT = 50
+    BATCH_SIZE = 32
+    MODEL_PATH = "../model/deep_dqn.pth"
 
     '''
     상태 데이터 정의
@@ -94,6 +100,8 @@ class Trading_Agent:
 
         self.pred_model = SimpleDNN(self.STATE_SIZE, self.ACTION_SIZE).to(device)
         self.target_model = SimpleDNN(self.STATE_SIZE, self.ACTION_SIZE).to(device)
+        self.load_model() # 기존 모델이 있으면 로드
+
         self.criterion = nn.MSELoss()
         self.optimizer = optim.Adam(self.pred_model.parameters(), lr=1e-3)
 
@@ -110,7 +118,9 @@ class Trading_Agent:
         self.deque_replayMemory = deque(maxlen=1000) # Replay_data 저장
         self.replayMemory_add = self.deque_replayMemory.append
 
-
+    def load_model(self):
+        if os.path.isfile(self.MODEL_PATH):
+            self.pred_model.load_state_dict(torch.load(self.MODEL_PATH))
 
     # 평단가 갱신
     def update_avgprice(self, buy_vol, price):
@@ -191,8 +201,12 @@ class Trading_Agent:
 
         # 보상 계산
         next_price = self.env.get_price()
-        next_portfolio_val = self.coin_quantity * next_price + self.balance
-        reward = (next_portfolio_val / self.portfolio_val) - 1  # 데이터 범위(-1 ~ 1)
+
+        if action == self.BUY or action == self.SELL:
+            reward = ((next_price / self.avg_price)-1)*(1+confidence)
+        else:
+            next_portfolio_val = self.coin_quantity * next_price + self.balance
+            reward = (next_portfolio_val / self.portfolio_val) - 1  # 데이터 범위(-1 ~ 1)
 
         self.hold_ratio = (self.coin_quantity*self.avg_price)/self.portfolio_val
 
@@ -204,21 +218,30 @@ class Trading_Agent:
 
         self.pred_model.train()
         self.optimizer.zero_grad()
-        state = torch.Tensor(state).unsqueeze(0).to(device)
-        next_state = torch.Tensor(next_state).unsqueeze(0).to(device)
 
-        predict = self.pred_model(state)[0]
-        predict_val = predict[action]
-        next_q = self.pred_model(next_state)
-        next_q_val = torch.max(next_q)
-        target = reward + self.discount_factor * next_q_val
+        samples = random.sample(self.deque_replayMemory, self.BATCH_SIZE)
+        states = []
+        actions = []
+        rewards = []
+        next_states = []
+        for smp in samples:
+            states.append(smp.state)
+            actions.append(smp.action)
+            rewards.append(smp.reward)
+            next_states.append(smp.next_state)
 
-        # print("predict")
-        # print(predict)
-        # print("next_q")
-        # print(next_q)
+        states = torch.Tensor(states).to(device)
+        next_states = torch.Tensor(next_states).to(device)
+        actions = torch.LongTensor(actions).to(device)
+        actions = F.one_hot(actions, num_classes = self.ACTION_SIZE)
+        rewards = torch.Tensor(rewards).to(device)
 
-        #loss = self.criterion(target, predict)
+        predict = self.pred_model(states)
+        predict_val = torch.sum(predict*actions, dim=1)
+        next_q = self.target_model(next_states).cpu().detach().numpy()
+        next_q_val = np.max(next_q, axis=1)
+        target = rewards + self.discount_factor * torch.Tensor(next_q_val).to(device)
+
         loss = torch.mean(torch.square(target - predict_val))
         loss.backward()
         self.optimizer.step()
@@ -236,7 +259,7 @@ class Trading_Agent:
             confidence = np.min([np.random.rand(), 0.5]) # 탐험의 경우 확신도는 0.5 이하의 램덤수
             return np.random.choice(self.ACTION_SIZE), confidence # or return np.random.randrange(self.ACTION_SIZE)
         state = torch.Tensor(state).unsqueeze(0).to(device)
-        q_values = self.pred_model(state)[0].detach().numpy()
+        q_values = self.pred_model(state)[0].cpu().detach().numpy()
         confidence = self.softmax(q_values)
         return np.argmax(q_values), max(confidence)
 
@@ -244,6 +267,10 @@ class Trading_Agent:
         state =self.env.get_state()
         state.extend([self.hold_ratio, self.balance/self.init_balance, self.profitloss])
         return state
+
+    def update_target_model(self):
+        with torch.no_grad():
+            self.target_model.load_state_dict(copy.deepcopy(self.pred_model.state_dict()))
 
     def run(self, training=True):
         list_profitloss = []
@@ -267,6 +294,7 @@ class Trading_Agent:
                 reward, next_state = self.trading(action, confidence)
                 next_action, confidence = self.get_action(next_state)
 
+                # 리플레이 메모리 데이터 저장
                 self.replayMemory_add(Replay_data(state=state, action=action, reward=reward, next_state=next_state))
 
                 if len(self.deque_replayMemory) > self.BATCH_SIZE:
@@ -275,17 +303,17 @@ class Trading_Agent:
                 state = next_state
                 action = next_action
 
-            # 업데이트 수행
-
             print(f"{self.env.get_date()}) 포트폴리오 가치: {self.portfolio_val:.0f}")
             list_profitloss.append(self.profitloss)
 
-
             if self.portfolio_val > max_portfolio_val:
                 self.save_record_to_csv()
-                torch.save(self.pred_model.state_dict(), f"../model/deep_sarsa.pth")
+                torch.save(self.target_model.state_dict(), self.MODEL_PATH)
                 print(f"모델 저장!")
-                max_portfolio_val = self.portfolio_val
+                max_portfolio_val = self.portfolio_val\
+
+                # 업데이트 수행
+                self.update_target_model()
 
         plt.plot(list_profitloss)
         plt.show()
@@ -293,7 +321,7 @@ class Trading_Agent:
 
     def save_record_to_csv(self):
         df = pd.DataFrame(self.list_agent_log)
-        df.to_csv(f"../log/deep_sarsa.csv")
+        df.to_csv(f"../log/deep_dqn.csv")
 
 if __name__ == "__main__":
     # x = torch.FloatTensor(range(15))  # 입력 값
